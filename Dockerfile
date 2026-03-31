@@ -1,23 +1,23 @@
-FROM python:3.11-slim
+FROM ubuntu:22.04
 
-# Install Chrome dependencies and Chrome
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Install Python + Chrome
 RUN apt-get update && apt-get install -y \
-    wget gnupg ca-certificates \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-    && apt-get update && apt-get install -y \
-    google-chrome-stable \
+    python3 python3-pip wget gnupg ca-certificates curl \
+    && wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y /tmp/chrome.deb \
+    && rm /tmp/chrome.deb \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY proxy.py .
 
-ENV PYTHONUNBUFFERED=1
 ENV CHROME_BIN=/usr/bin/google-chrome
 
 EXPOSE 8080
 
-CMD ["python", "-u", "proxy.py"]
+CMD ["python3", "-u", "proxy.py"]
