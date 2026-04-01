@@ -1,11 +1,13 @@
 FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DISPLAY=:99
 
-# Dependencias del sistema
+# Sistema + Xvfb (display virtual)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl unzip gnupg ca-certificates \
+    xvfb x11-utils \
     fonts-liberation libappindicator3-1 libasound2 \
     libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 \
     libexpat1 libfontconfig1 libgbm1 libgdk-pixbuf2.0-0 libglib2.0-0 \
@@ -15,27 +17,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Chrome 120 — ultima version estable antes de los crashes headless con JS pesado
-# Usamos chrome-for-testing que tiene binarios exactos por version
+# Chrome estable desde repositorio oficial
+RUN wget -q -O /tmp/chrome.deb \
+        "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
+    && apt-get update \
+    && apt-get install -y /tmp/chrome.deb \
+    && rm /tmp/chrome.deb \
+    && rm -rf /var/lib/apt/lists/* \
+    && google-chrome --version
+
+# ChromeDriver matching
 RUN set -e; \
-    CHROME_VERSION="120.0.6099.109"; \
-    BASE="https://storage.googleapis.com/chrome-for-testing-public"; \
-    echo "Descargando Chrome $CHROME_VERSION..."; \
-    wget -q -O /tmp/chrome.zip "$BASE/$CHROME_VERSION/linux64/chrome-linux64.zip"; \
-    unzip -q /tmp/chrome.zip -d /opt/; \
-    ln -s /opt/chrome-linux64/chrome /usr/local/bin/google-chrome; \
-    rm /tmp/chrome.zip; \
-    echo "Descargando ChromeDriver $CHROME_VERSION..."; \
-    wget -q -O /tmp/cd.zip "$BASE/$CHROME_VERSION/linux64/chromedriver-linux64.zip"; \
+    CHROME_VER=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+'); \
+    BASE_URL="https://storage.googleapis.com/chrome-for-testing-public"; \
+    DL_URL="$BASE_URL/$CHROME_VER/linux64/chromedriver-linux64.zip"; \
+    if wget -q --spider "$DL_URL" 2>/dev/null; then \
+        wget -q -O /tmp/cd.zip "$DL_URL"; \
+    else \
+        LATEST=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json" \
+                 | python3 -c "import sys,json; print(json.load(sys.stdin)['channels']['Stable']['version'])"); \
+        wget -q -O /tmp/cd.zip "$BASE_URL/$LATEST/linux64/chromedriver-linux64.zip"; \
+    fi; \
     unzip -q /tmp/cd.zip -d /tmp/cd_tmp; \
     mv /tmp/cd_tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver; \
-    chmod +x /usr/local/bin/chromedriver /usr/local/bin/google-chrome; \
+    chmod +x /usr/local/bin/chromedriver; \
     rm -rf /tmp/cd.zip /tmp/cd_tmp; \
-    google-chrome --version; \
     chromedriver --version
 
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -43,5 +52,7 @@ COPY proxy.py .
 
 ENV PORT=8080
 
-CMD ["python3", "-u", "proxy.py"]
-
+# Arrancar Xvfb (display virtual) antes del servidor
+CMD Xvfb :99 -screen 0 1280x800x24 -ac +extension GLX +render -noreset & \
+    sleep 2 && \
+    python3 -u proxy.py
