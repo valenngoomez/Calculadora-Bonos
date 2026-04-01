@@ -1,13 +1,15 @@
-FROM python:3.11-slim
+FROM zenika/alpine-chrome:with-python
+
+USER root
+
+# Install pip packages
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+COPY proxy.py .
 
 ENV PYTHONUNBUFFERED=1
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY proxy.py .
-COPY index.html .
-
 EXPOSE 8080
 
-CMD ["python", "-u", "proxy.py"]
+CMD ["python3", "-u", "proxy.py"]
