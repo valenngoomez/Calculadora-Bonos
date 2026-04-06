@@ -4,7 +4,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     DISPLAY=:99
 
-# Sistema + Xvfb (display virtual)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl unzip gnupg ca-certificates \
     xvfb x11-utils \
@@ -17,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Chrome estable desde repositorio oficial
 RUN wget -q -O /tmp/chrome.deb \
         "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
     && apt-get update \
@@ -26,7 +24,6 @@ RUN wget -q -O /tmp/chrome.deb \
     && rm -rf /var/lib/apt/lists/* \
     && google-chrome --version
 
-# ChromeDriver matching
 RUN set -e; \
     CHROME_VER=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+'); \
     BASE_URL="https://storage.googleapis.com/chrome-for-testing-public"; \
@@ -34,7 +31,7 @@ RUN set -e; \
     if wget -q --spider "$DL_URL" 2>/dev/null; then \
         wget -q -O /tmp/cd.zip "$DL_URL"; \
     else \
-        LATEST=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json" \
+        LATEST=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing-public/last-known-good-versions.json" \
                  | python3 -c "import sys,json; print(json.load(sys.stdin)['channels']['Stable']['version'])"); \
         wget -q -O /tmp/cd.zip "$BASE_URL/$LATEST/linux64/chromedriver-linux64.zip"; \
     fi; \
@@ -44,15 +41,14 @@ RUN set -e; \
     rm -rf /tmp/cd.zip /tmp/cd_tmp; \
     chromedriver --version
 
+# Script de arranque que espera a que Xvfb esté listo
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY proxy.py .
 
 ENV PORT=8080
-
-# Arrancar Xvfb (display virtual) antes del servidor
-CMD Xvfb :99 -screen 0 1280x800x24 -ac +extension GLX +render -noreset & \
-    sleep 2 && \
-    python3 -u proxy.py
+CMD ["/start.sh"]
